@@ -5,7 +5,7 @@ export interface TextChunk {
 
 export function chunkText(
   text: string,
-  size = 1000
+  size = 2500
 ): TextChunk[] {
 
   const chunks: TextChunk[] = [];

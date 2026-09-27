@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai";
-import { embed } from "ai";
+import { embed, embedMany } from "ai";
 
 export async function createEmbedding(
     text: string
@@ -13,4 +13,16 @@ export async function createEmbedding(
     });
 
     return result.embedding;
+}
+
+export async function createEmbeddings(
+    texts: string[],
+): Promise<number[][]> {
+    const result = await embedMany({
+        model: openai.embedding("text-embedding-3-small"),
+        values: texts,
+        maxParallelCalls: 4,
+    });
+
+    return result.embeddings;
 }

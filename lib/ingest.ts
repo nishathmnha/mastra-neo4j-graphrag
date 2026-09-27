@@ -1,18 +1,41 @@
 import { chunkText } from "./chunk";
-import { createEmbedding } from "./embedding";
+import { createEmbeddings } from "./embedding";
 import { extractGraph } from "./graph-extractor";
+import { ensureNeo4jSchema } from "./neo4j";
 
 import {
     saveDocument,
-    saveChunk,
-    saveEntities,
-    saveRelationships,
+    saveChunkGraph,
 } from "./graph-store";
+
+const ingestionConcurrency = 4;
+
+async function processConcurrently<T>(
+    items: T[],
+    worker: (item: T, index: number) => Promise<void>,
+) {
+    let nextIndex = 0;
+
+    async function runWorker() {
+        while (nextIndex < items.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            await worker(items[index], index);
+        }
+    }
+
+    const workerCount = Math.min(ingestionConcurrency, items.length);
+    await Promise.all(
+        Array.from({ length: workerCount }, () => runWorker()),
+    );
+}
 
 export async function ingestDocument(
     name: string,
     text: string
 ) {
+
+    await ensureNeo4jSchema();
 
     const documentId = crypto.randomUUID();
 
@@ -22,33 +45,25 @@ export async function ingestDocument(
     );
 
     const chunks = chunkText(text);
+    const embeddings = await createEmbeddings(
+        chunks.map((chunk) => chunk.text),
+    );
 
-    for (const chunk of chunks) {
-
+    await processConcurrently(chunks, async (chunk, index) => {
         console.log(
             `Processing chunk ${chunk.id}`
         );
 
-        const [embedding, graph] =
-            await Promise.all([
-                createEmbedding(chunk.text),
-                extractGraph(chunk.text),
-            ]);
+        const graph = await extractGraph(chunk.text);
 
-        await saveChunk(
+        await saveChunkGraph(
             documentId,
             chunk.id,
             chunk.text,
-            embedding
+            embeddings[index],
+            graph,
         );
-
-        await saveEntities(
-            chunk.id,
-            graph
-        );
-
-        await saveRelationships(graph);
-    }
+    });
 
     return {
         documentId,

@@ -1,4 +1,4 @@
-import { driver } from "./neo4j";
+import { ensureNeo4jSchema, getSession } from "./neo4j";
 import { createEmbedding } from "./embedding";
 import { answerAgent } from "@/mastra/agents/answer-agent";
 
@@ -19,7 +19,7 @@ async function vectorSearch(
     limit = 3
 ): Promise<RetrievedChunk[]> {
 
-    const session = driver.session();
+    const session = getSession();
 
     try {
 
@@ -65,7 +65,7 @@ async function getSeedEntities(
         return [];
     }
 
-    const session = driver.session();
+    const session = getSession();
 
     try {
 
@@ -99,7 +99,7 @@ async function expandGraph(
         return [];
     }
 
-    const session = driver.session();
+    const session = getSession();
 
     try {
 
@@ -178,7 +178,16 @@ async function generateAnswer(
 ) {
 
     const response =
-        await answerAgent.generate(`
+        await answerAgent.generate(buildAnswerPrompt(question, context));
+
+    return response.text;
+}
+
+function buildAnswerPrompt(
+    question: string,
+    context: string,
+) {
+    return `
 Question:
 
 ${question}
@@ -187,14 +196,14 @@ ${question}
 Context:
 
 ${context}
-`);
-
-    return response.text;
+`;
 }
 
 export async function graphRag(
     question: string
 ) {
+
+    await ensureNeo4jSchema();
 
     // 1. Embed question
 
@@ -249,4 +258,20 @@ export async function graphRag(
         entities,
         relationships,
     };
+}
+
+export async function streamGraphRag(question: string) {
+    await ensureNeo4jSchema();
+
+    const embedding = await createEmbedding(question);
+    const chunks = await vectorSearch(embedding, 3);
+    const entities = await getSeedEntities(chunks.map((chunk) => chunk.id));
+    const relationships = await expandGraph(entities);
+    const context = buildContext(chunks, relationships);
+
+    const response = await answerAgent.stream(
+        buildAnswerPrompt(question, context),
+    );
+
+    return response.textStream;
 }
