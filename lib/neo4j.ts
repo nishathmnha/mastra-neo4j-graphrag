@@ -1,13 +1,13 @@
 import neo4j from "neo4j-driver";
 
 export const driver = neo4j.driver(
-  process.env.NEO4J_URI!,
-  neo4j.auth.basic(
-    process.env.NEO4J_USERNAME!,
-    process.env.NEO4J_PASSWORD!
-  )
+    process.env.NEO4J_URI!,
+    neo4j.auth.basic(
+        process.env.NEO4J_USERNAME!,
+        process.env.NEO4J_PASSWORD!
+    )
 );
 
 export async function verifyNeo4jConnection() {
-  await driver.verifyConnectivity();
+    await driver.verifyConnectivity();
 }

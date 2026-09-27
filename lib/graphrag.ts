@@ -3,28 +3,28 @@ import { createEmbedding } from "./embedding";
 import { answerAgent } from "@/mastra/agents/answer-agent";
 
 export interface RetrievedChunk {
-  id: string;
-  text: string;
-  score: number;
+    id: string;
+    text: string;
+    score: number;
 }
 
 export interface GraphRelationship {
-  source: string;
-  type: string;
-  target: string;
+    source: string;
+    type: string;
+    target: string;
 }
 
 async function vectorSearch(
-  embedding: number[],
-  limit = 3
+    embedding: number[],
+    limit = 3
 ): Promise<RetrievedChunk[]> {
 
-  const session = driver.session();
+    const session = driver.session();
 
-  try {
+    try {
 
-    const result = await session.run(
-      `
+        const result = await session.run(
+            `
       MATCH (chunk:Chunk)
 
       SEARCH chunk IN (
@@ -39,72 +39,72 @@ async function vectorSearch(
         score
       ORDER BY score DESC
       `,
-      {
-        embedding,
-        limit,
-      }
-    );
+            {
+                embedding,
+                limit,
+            }
+        );
 
-    return result.records.map(record => ({
-      id: record.get("id"),
-      text: record.get("text"),
-      score: record.get("score"),
-    }));
+        return result.records.map(record => ({
+            id: record.get("id"),
+            text: record.get("text"),
+            score: record.get("score"),
+        }));
 
-  } finally {
-    await session.close();
-  }
+    } finally {
+        await session.close();
+    }
 }
 
 
 async function getSeedEntities(
-  chunkIds: string[]
+    chunkIds: string[]
 ): Promise<string[]> {
 
-  if (chunkIds.length === 0) {
-    return [];
-  }
+    if (chunkIds.length === 0) {
+        return [];
+    }
 
-  const session = driver.session();
+    const session = driver.session();
 
-  try {
+    try {
 
-    const result = await session.run(
-      `
+        const result = await session.run(
+            `
       MATCH (c:Chunk)-[:MENTIONS]->(e:Entity)
 
       WHERE c.id IN $chunkIds
 
       RETURN DISTINCT e.name AS name
       `,
-      {
-        chunkIds,
-      }
-    );
+            {
+                chunkIds,
+            }
+        );
 
-    return result.records.map(
-      record => record.get("name")
-    );
+        return result.records.map(
+            record => record.get("name")
+        );
 
-  } finally {
-    await session.close();
-  }
+    } finally {
+        await session.close();
+    }
 }
 
 async function expandGraph(
-  entityNames: string[]
+    entityNames: string[]
 ): Promise<GraphRelationship[]> {
 
-  if (entityNames.length === 0) {
-    return [];
-  }
+    if (entityNames.length === 0) {
+        return [];
+    }
 
-  const session = driver.session();
+    const session = driver.session();
 
-  try {
+    try {
 
-    const result = await session.run(
-      `
+        const result = await session.run(
+            `
       MATCH path =
         (seed:Entity)-[:RELATED_TO*1..2]-(related:Entity)
 
@@ -124,42 +124,42 @@ async function expandGraph(
 
       LIMIT 30
       `,
-      {
-        entityNames,
-      }
-    );
+            {
+                entityNames,
+            }
+        );
 
-    return result.records.map(record => ({
-      source: record.get("source"),
-      type: record.get("type"),
-      target: record.get("target"),
-    }));
+        return result.records.map(record => ({
+            source: record.get("source"),
+            type: record.get("type"),
+            target: record.get("target"),
+        }));
 
-  } finally {
-    await session.close();
-  }
+    } finally {
+        await session.close();
+    }
 }
 
 function buildContext(
-  chunks: RetrievedChunk[],
-  relationships: GraphRelationship[]
+    chunks: RetrievedChunk[],
+    relationships: GraphRelationship[]
 ) {
 
-  const chunkContext = chunks
-    .map(
-      (chunk, index) =>
-        `[Chunk ${index + 1}]\n${chunk.text}`
-    )
-    .join("\n\n");
+    const chunkContext = chunks
+        .map(
+            (chunk, index) =>
+                `[Chunk ${index + 1}]\n${chunk.text}`
+        )
+        .join("\n\n");
 
-  const graphContext = relationships
-    .map(
-      relationship =>
-        `${relationship.source} -> ${relationship.type} -> ${relationship.target}`
-    )
-    .join("\n");
+    const graphContext = relationships
+        .map(
+            relationship =>
+                `${relationship.source} -> ${relationship.type} -> ${relationship.target}`
+        )
+        .join("\n");
 
-  return `
+    return `
 DOCUMENT CONTEXT
 
 ${chunkContext}
@@ -173,12 +173,12 @@ ${graphContext}
 
 
 async function generateAnswer(
-  question: string,
-  context: string
+    question: string,
+    context: string
 ) {
 
-  const response =
-    await answerAgent.generate(`
+    const response =
+        await answerAgent.generate(`
 Question:
 
 ${question}
@@ -189,64 +189,64 @@ Context:
 ${context}
 `);
 
-  return response.text;
+    return response.text;
 }
 
 export async function graphRag(
-  question: string
+    question: string
 ) {
 
-  // 1. Embed question
+    // 1. Embed question
 
-  const embedding =
-    await createEmbedding(question);
-
-
-  // 2. Vector retrieval
-
-  const chunks =
-    await vectorSearch(
-      embedding,
-      3
-    );
+    const embedding =
+        await createEmbedding(question);
 
 
-  // 3. Find graph entry points
+    // 2. Vector retrieval
 
-  const entities =
-    await getSeedEntities(
-      chunks.map(chunk => chunk.id)
-    );
-
-
-  // 4. Expand graph
-
-  const relationships =
-    await expandGraph(entities);
+    const chunks =
+        await vectorSearch(
+            embedding,
+            3
+        );
 
 
-  // 5. Build context
+    // 3. Find graph entry points
 
-  const context =
-    buildContext(
-      chunks,
-      relationships
-    );
-
-
-  // 6. LLM generation
-
-  const answer =
-    await generateAnswer(
-      question,
-      context
-    );
+    const entities =
+        await getSeedEntities(
+            chunks.map(chunk => chunk.id)
+        );
 
 
-  return {
-    answer,
-    chunks,
-    entities,
-    relationships,
-  };
+    // 4. Expand graph
+
+    const relationships =
+        await expandGraph(entities);
+
+
+    // 5. Build context
+
+    const context =
+        buildContext(
+            chunks,
+            relationships
+        );
+
+
+    // 6. LLM generation
+
+    const answer =
+        await generateAnswer(
+            question,
+            context
+        );
+
+
+    return {
+        answer,
+        chunks,
+        entities,
+        relationships,
+    };
 }

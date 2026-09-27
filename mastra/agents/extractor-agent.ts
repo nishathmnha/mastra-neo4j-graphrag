@@ -1,12 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 
 export const extractorAgent = new Agent({
-  id: "graph-extractor",
-  name: "Graph Extractor",
+    id: "graph-extractor",
+    name: "Graph Extractor",
 
-  model: "openai/gpt-5.6-luna",
+    model: "openai/gpt-5.6-luna",
 
-  instructions: `
+    instructions: `
 You extract knowledge graphs from text.
 
 Identify important entities and relationships.
